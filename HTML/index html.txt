@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shattered Isles - Behemoth Hunter Prototype</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #0b0f19; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #canvas-container { width: 100%; height: 100%; display: block; cursor: grab; }
+        #canvas-container:active { cursor: grabbing; }
+
+        /* UI Overlays */
+        .hud-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 24px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; }
+        
+        /* Health & Stamina Bars */
+        .player-status { display: flex; flex-direction: column; gap: 8px; width: 320px; background: rgba(11, 15, 25, 0.75); padding: 16px; border-radius: 12px; border: 1px solid rgba(0, 210, 255, 0.3); backdrop-filter: blur(8px); }
+        .bar-container { width: 100%; height: 16px; background: rgba(255, 255, 255, 0.1); border-radius: 8px; overflow: hidden; position: relative; border: 1px solid rgba(255, 255, 255, 0.2); }
+        .hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff3344, #ff6b8b); transition: width 0.15s ease-out; }
+        .stamina-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00d2ff, #3a7bd5); transition: width 0.05s linear; }
+        .aether-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #b033ff, #ff33cc); transition: width 0.1s linear; }
+        .bar-label { font-size: 11px; font-weight: 700; color: #fff; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; display: flex; justify-content: space-between; }
+
+        /* Boss Health Bar */
+        .boss-hud { display: flex; flex-direction: column; align-items: center; width: 45%; max-width: 600px; background: rgba(11, 15, 25, 0.85); padding: 14px 24px; border-radius: 14px; border: 1px solid rgba(255, 50, 80, 0.4); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .boss-name { font-size: 16px; font-weight: 800; color: #ff4a6e; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; text-shadow: 0 0 10px rgba(255,74,110,0.5); }
+        .boss-hp-bar { width: 100%; height: 20px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 74, 110, 0.4); }
+        .boss-hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff4a6e, #ff9933); transition: width 0.1s ease-out; }
+
+        /* Controls Guide */
+        .controls-panel { background: rgba(11, 15, 25, 0.8); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #cbd5e1; font-size: 13px; line-height: 1.6; }
+        .controls-panel b { color: #00d2ff; }
+
+        /* Title Screen Overlay */
+        #title-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at center, rgba(15,23,42,0.92) 0%, rgba(5,7,11,0.98) 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; transition: opacity 0.5s ease; }
+        .title-logo { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: 6px; text-transform: uppercase; margin-bottom: 8px; text-shadow: 0 0 30px rgba(0,210,255,0.6); text-align: center; }
+        .title-subtitle { font-size: 18px; color: #00d2ff; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 40px; }
+        .play-btn { background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); color: #fff; border: none; padding: 16px 48px; font-size: 18px; font-weight: 800; border-radius: 30px; cursor: pointer; letter-spacing: 2px; text-transform: uppercase; box-shadow: 0 0 25px rgba(0,210,255,0.5); transition: all 0.2s ease; }
+        .play-btn:hover { transform: scale(1.05); box-shadow: 0 0 35px rgba(0,210,255,0.8); }
+
+        /* Floating Damage Text */
+        .damage-number { position: absolute; font-weight: 900; font-size: 22px; pointer-events: none; animation: floatUp 0.8s ease-out forwards; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 50; }
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-60px) scale(1.2); opacity: 0; }
+        }
+    </style>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="title-screen">
+        <div class="title-logo">Shattered Isles</div>
+        <div class="title-subtitle">Behemoth Hunter Action Prototype</div>
+        <button class="play-btn" onclick="startGame()">Start Hunt</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div class="hud-overlay">
+        <div class="top-bar">
+            <div class="player-status">
+                <div>
+                    <div class="bar-label"><span>Slayer Vitals</span><span id="hp-text">100 / 100</span></div>
+                    <div class="bar-container"><div id="hp-bar" class="hp-fill"></div></div>
+                </div>
+                <div>
+                    <div class="bar-label"><span>Stamina</span><span id="stamina-text">100 / 100</span></div>
+                    <div class="bar-container"><div id="stamina-bar" class="stamina-fill"></div></div>
+                </div>
+                <div>
+                    <div class="bar-label"><span>Aether Overdrive</span><span id="aether-text">0 / 100</span></div>
+                    <div class="bar-container"><div id="aether-bar" class="aether-fill"></div></div>
+                </div>
+            </div>
+
+            <div class="boss-hud">
+                <div class="boss-name" id="boss-title">Embergnasher (Behemoth)</div>
+                <div class="boss-hp-bar"><div id="boss-hp" class="boss-hp-fill"></div></div>
+            </div>
+
+            <div class="controls-panel">
+                <b>WASD:</b> Move Slayer<br>
+                <b>Mouse Drag:</b> Free Orbit Camera<br>
+                <b>Space:</b> Jump<br>
+                <b>Shift / F:</b> Dodge Roll (I-Frames)<br>
+                <b>Left-Click:</b> 3-Hit Sword Combo<br>
+                <b>Right-Click:</b> Heavy Interrupt ("Boop")<br>
+                <b>V:</b> Valiant Overdrive (At 100% Aether)<br>
+                <b>1:</b> Aether Healing Flask
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, clock;
+        let player, behemoth;
+        let keys = {};
+        let mouse = { x: 0, y: 0, isDown: false, prevX: 0, prevY: 0 };
+        let cameraAngleX = 0, cameraAngleY = 20, cameraDistance = 12;
+        let gameStarted = false;
+
+        // Player Stats & Combat State
+        const playerStats = {
+            hp: 100, maxHp: 100,
+            stamina: 100, maxStamina: 100, staminaRegenDelay: 0,
+            aether: 0, maxAether: 100,
+            flasks: 5,
+            speed: 9, sprintSpeed: 14,
+            isSprinting: false, isDodging: false, dodgeTimer: 0, isInvincible: false,
+            isJumping: false, verticalVelocity: 0,
+            comboStep: 0, comboTimer: 0, isAttacking: false,
+            overdriveActive: false, overdriveTimer: 0
+        };
+
+        // Behemoth Stats
+        const bossStats = {
+            hp: 1500, maxHp: 1500,
+            isEnraged: false,
+            attackTimer: 0,
+            isCharging: false,
+            staggered: false, staggerTimer: 0
+        };
+
+        function startGame() {
+            document.getElementById('title-screen').style.opacity = '0';
+            setTimeout(() => document.getElementById('title-screen').style.display = 'none', 500);
+            gameStarted = true;
+            initThree();
+            animate();
+        }
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0c101b);
+            scene.fog = new THREE.FogExp2(0x0c101b, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xddeeff, 0.6);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfff5e6, 1.4);
+            sunLight.position.set(30, 50, 20);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 150;
+            const d = 35;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Floating Island Arena
+            const islandGeo = new THREE.CylinderGeometry(40, 32, 12, 32);
+            const islandMat = new THREE.MeshStandardMaterial({ color: 0x222a35, roughness: 0.8 });
+            const island = new THREE.Mesh(islandGeo, islandMat);
+            island.position.y = -6;
+            island.receiveShadow = true;
+            scene.add(island);
+
+            // Aether Vents (Healing rings)
+            for(let i=0; i<3; i++) {
+                const angle = (i / 3) * Math.PI * 2;
+                const ventGeo = new THREE.RingGeometry(2, 2.5, 32);
+                ventGeo.rotateX(-Math.PI/2);
+                const ventMat = new THREE.MeshBasicMaterial({ color: 0x00d2ff, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+                const vent = new THREE.Mesh(ventGeo, ventMat);
+                vent.position.set(Math.cos(angle)*15, 0.05, Math.sin(angle)*15);
+                scene.add(vent);
+            }
+
+            // Build Player (Slayer)
+            player = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.4, roughness: 0.3 });
+            const armorMat = new THREE.MeshStandardMaterial({ color: 0x00d2ff, metalness: 0.8, roughness: 0.2, emissive: 0x004466 });
+            
+            // Torso
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.5), bodyMat);
+            torso.position.y = 1.3;
+            torso.castShadow = true;
+            player.add(torso);
+
+            // Shoulders/Pauldrons
+            const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.6), armorMat);
+            shoulderL.position.set(0.6, 1.7, 0);
+            player.add(shoulderL);
+            const shoulderR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.6), armorMat);
+            shoulderR.position.set(-0.6, 1.7, 0);
+            player.add(shoulderR);
+
+            // Head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xfcd34d }));
+            head.position.y = 2.1;
+            player.add(head);
+
+            // Greatblade Weapon
+            const swordGroup = new THREE.Group();
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.4, 0.08), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.1, emissive: 0x00d2ff, emissiveIntensity: 0.3 }));
+            blade.position.y = 1.2;
+            blade.castShadow = true;
+            swordGroup.add(blade);
+            swordGroup.position.set(0.6, 1.0, 0.4);
+            swordGroup.rotation.x = 0.5;
+            player.sword = swordGroup;
+            player.add(swordGroup);
+
+            player.position.set(0, 0, 8);
+            scene.add(player);
+
+            // Build Behemoth (Embergnasher)
+            behemoth = new THREE.Group();
+            const bBodyMat = new THREE.MeshStandardMaterial({ color: 0x331a00, roughness: 0.6, metalness: 0.4 });
+            const bSpineMat = new THREE.MeshStandardMaterial({ color: 0xff3300, emissive: 0xff3300, emissiveIntensity: 0.6 });
+
+            const bTorso = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.8, 5.5), bBodyMat);
+            bTorso.position.y = 2.2;
+            bTorso.castShadow = true;
+            behemoth.add(bTorso);
+
+            const bHead = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.0, 2.5), bBodyMat);
+            bHead.position.set(0, 2.6, 3.2);
+            bHead.castShadow = true;
+            behemoth.add(bHead);
+
+            // Dorsal Spines (Breakable parts)
+            for(let i=0; i<4; i++) {
+                const spine = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 4), bSpineMat);
+                spine.position.set(0, 3.8, 1.5 - i * 1.2);
+                behemoth.add(spine);
+            }
+
+            behemoth.position.set(0, 0, -14);
+            scene.add(behemoth);
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('keydown', (e) => { keys[e.code] = true; handleSpecialInputs(e); });
+            window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+            const canvas = renderer.domElement;
+            canvas.addEventListener('mousedown', (e) => {
+                mouse.isDown = true;
+                mouse.prevX = e.clientX;
+                mouse.prevY = e.clientY;
+                if (e.button === 0) performAttack(1);
+                if (e.button === 2) performAttack(2);
+            });
+            window.addEventListener('mouseup', () => { mouse.isDown = false; });
+            window.addEventListener('mousemove', (e) => {
+                if (mouse.isDown) {
+                    const dx = e.clientX - mouse.prevX;
+                    const dy = e.clientY - mouse.prevY;
+                    cameraAngleX -= dx * 0.005;
+                    cameraAngleY = Math.max(5, Math.min(75, cameraAngleY + dy * 0.005));
+                    mouse.prevX = e.clientX;
+                    mouse.prevY = e.clientY;
+                }
+            });
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+        }
+
+        function handleSpecialInputs(e) {
+            if (!gameStarted) return;
+            if (e.code === 'KeyV' && playerStats.aether >= 100) {
+                playerStats.overdriveActive = true;
+                playerStats.overdriveTimer = 15;
+                playerStats.aether = 0;
+                spawnDamageText("VALIANT OVERDRIVE!", player.position, "#b033ff");
+            }
+            if (e.code === 'Digit1' && playerStats.flasks > 0 && playerStats.hp < playerStats.maxHp) {
+                playerStats.flasks--;
+                playerStats.hp = Math.min(playerStats.maxHp, playerStats.hp + 50);
+                spawnDamageText("+50 HP", player.position, "#34d399");
+            }
+        }
+
+        function performAttack(type) {
+            if (playerStats.isAttacking || playerStats.isDodging) return;
+
+            if (type === 1) { // Light Attack / Combo
+                playerStats.isAttacking = true;
+                playerStats.comboStep = (playerStats.comboStep % 3) + 1;
+                playerStats.comboTimer = 0.5;
+
+                // Check distance to Behemoth
+                const dist = player.position.distanceTo(behemoth.position);
+                if (dist < 5.5) {
+                    const dmg = 45 * playerStats.comboStep;
+                    bossStats.hp -= dmg;
+                    spawnDamageText(dmg, behemoth.position, "#ffffff");
+                    playerStats.aether = Math.min(100, playerStats.aether + 20);
+                }
+                setTimeout(() => { playerStats.isAttacking = false; }, 350);
+            } else if (type === 2) { // Heavy Interrupt ("Boop")
+                playerStats.isAttacking = true;
+                playerStats.comboTimer = 0.8;
+
+                const dist = player.position.distanceTo(behemoth.position);
+                if (dist < 6.0) {
+                    const dmg = 120;
+                    bossStats.hp -= dmg;
+                    spawnDamageText("HEAVY STAGGER!", behemoth.position, "#38bdf8");
+                    
+                    if (bossStats.isCharging) {
+                        bossStats.staggered = true;
+                        bossStats.staggerTimer = 3.0;
+                        bossStats.isCharging = false;
+                        spawnDamageText("INTERRUPTED (BOOP)!", behemoth.position, "#facc15");
+                    }
+                }
+                setTimeout(() => { playerStats.isAttacking = false; }, 600);
+            }
+        }
+
+        function spawnDamageText(text, pos, color) {
+            const div = document.createElement('div');
+            div.className = 'damage-number';
+            div.innerText = text;
+            div.style.color = color;
+            
+            // Project 3D pos to 2D Screen
+            const vector = pos.clone();
+            vector.y += 2.5;
+            vector.project(camera);
+            const x = (vector.x * .5 + .5) * window.innerWidth;
+            const y = (-(vector.y * .5) + .5) * window.innerHeight;
+            
+            div.style.left = `${x}px`;
+            div.style.top = `${y}px`;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 800);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            if (!gameStarted) return;
+            requestAnimationFrame(animate);
+
+            const dt = clock.getDelta();
+
+            // Player Movement
+            let moveDir = new THREE.Vector3();
+            const camForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraAngleX);
+            const camRight = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraAngleX);
+
+            if (keys['KeyW']) moveDir.add(camForward);
+            if (keys['KeyS']) moveDir.sub(camForward);
+            if (keys['KeyD']) moveDir.add(camRight);
+            if (keys['KeyA']) moveDir.sub(camRight);
+            moveDir.y = 0;
+            moveDir.normalize();
+
+            playerStats.isSprinting = keys['ShiftLeft'] || keys['ShiftRight'] && playerStats.stamina > 5 && moveDir.length() > 0;
+            const currentSpeed = playerStats.isSprinting ? playerStats.sprintSpeed : playerStats.speed;
+
+            if (playerStats.isSprinting) {
+                playerStats.stamina -= 35 * dt;
+                playerStats.staminaRegenDelay = 1.0;
+            } else if (playerStats.staminaRegenDelay > 0) {
+                playerStats.staminaRegenDelay -= dt;
+            } else if (playerStats.stamina < playerStats.maxStamina) {
+                playerStats.stamina = Math.min(playerStats.maxStamina, playerStats.stamina + 25 * dt);
+            }
+
+            // Dodge Roll (Q or Shift)
+            if ((keys['KeyQ'] || keys['KeyShift']) && !playerStats.isDodging && playerStats.stamina >= 25 && moveDir.length() > 0) {
+                playerStats.isDodging = true;
+                playerStats.isInvincible = true;
+                playerStats.dodgeTimer = 0.4;
+                playerStats.stamina -= 25;
+                setTimeout(() => { playerStats.isInvincible = false; }, 250);
+            }
+
+            if (playerStats.isDodging) {
+                playerStats.dodgeTimer -= dt;
+                player.position.addScaledVector(moveDir, currentSpeed * 1.6 * dt);
+                if (playerStats.dodgeTimer <= 0) playerStats.isDodging = false;
+            } else if (moveDir.length() > 0) {
+                player.position.addScaledVector(moveDir, currentSpeed * dt);
+                player.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+            }
+
+            // Jump & Gravity
+            if (keys['Space'] && !playerStats.isJumping && player.position.y <= 0.05) {
+                playerStats.isJumping = true;
+                playerStats.verticalVelocity = 9.0;
+            }
+            if (playerStats.isJumping) {
+                player.position.y += playerStats.verticalVelocity * dt;
+                playerStats.verticalVelocity -= 25 * dt;
+                if (player.position.y <= 0) {
+                    player.position.y = 0;
+                    playerStats.isJumping = false;
+                }
+            }
+
+            // Behemoth AI & Combat Loop
+            if (!bossStats.staggered) {
+                bossStats.attackTimer += dt;
+                if (bossStats.attackTimer > 4.0) {
+                    bossStats.attackTimer = 0;
+                    bossStats.isCharging = true;
+                    setTimeout(() => { bossStats.isCharging = false; }, 2000);
+                }
+
+                if (bossStats.isCharging) {
+                    // Charge towards player
+                    const dir = new THREE.Vector3().subVectors(player.position, behemoth.position);
+                    dir.y = 0;
+                    dir.normalize();
+                    behemoth.position.addScaledVector(dir, 8 * dt);
+                    behemoth.rotation.y = Math.atan2(dir.x, dir.z);
+
+                    // Check hit on player
+                    if (behemoth.position.distanceTo(player.position) < 3.0 && !playerStats.isInvincible) {
+                        playerStats.hp -= 30;
+                        spawnDamageText("-30 HP", player.position, "#ff3344");
+                        bossStats.isCharging = false;
+                    }
+                }
+            } else {
+                bossStats.staggerTimer -= dt;
+                if (bossStats.staggerTimer <= 0) bossStats.staggered = false;
+            }
+
+            // Camera Orbit Following
+            const camOffset = new THREE.Vector3(
+                Math.sin(cameraAngleX) * Math.cos(cameraAngleY * Math.PI / 180) * cameraDistance,
+                Math.sin(cameraAngleY * Math.PI / 180) * cameraDistance + 2,
+                Math.cos(cameraAngleX) * Math.cos(cameraAngleY * Math.PI / 180) * cameraDistance
+            );
+            camera.position.copy(player.position).add(camOffset);
+            camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+
+            // Update UI HUD
+            document.getElementById('hp-bar').style.width = `${(playerStats.hp / playerStats.maxHp) * 100}%`;
+            document.getElementById('hp-text').innerText = `${Math.max(0, Math.round(playerStats.hp))} / ${playerStats.maxHp}`;
+            document.getElementById('stamina-bar').style.width = `${(playerStats.stamina / playerStats.maxStamina) * 100}%`;
+            document.getElementById('stamina-text').innerText = `${Math.round(playerStats.stamina)} / ${playerStats.maxStamina}`;
+            document.getElementById('aether-bar').style.width = `${playerStats.aether}%`;
+            document.getElementById('aether-text').innerText = `${Math.round(playerStats.aether)} / 100`;
+
+            document.getElementById('boss-hp').style.width = `${Math.max(0, (bossStats.hp / bossStats.maxHp) * 100)}%`;
+            if (bossStats.isCharging) {
+                document.getElementById('boss-title').innerText = "🔥 EMBERGNASHERS CHARGE! (BOOP IT!) 🔥";
+            } else if (bossStats.staggered) {
+                document.getElementById('boss-title').innerText = "💤 STAGGERED (DOWNED)! 💤";
+            } else {
+                document.getElementById('boss-title').innerText = "Embergnasher (Behemoth)";
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
